@@ -55,7 +55,8 @@ class prompt(base):
         hidden_list = []
         # generate emotion task word as prev_input 
         prev_input = torch.LongTensor([self.tokenizer.encode(task) for _ in range(inputs_id.shape[0])]).to(self.device)
-        _, past = model(prev_input, past=None)
+        outputs = model(prev_input, past_key_values=None)
+        past = outputs['past_key_values']
         position_ids = mask.long().cumsum(-1) - 1 + prev_input.shape[1]
         position_ids.masked_fill_(mask == 0, 1).to(self.device)
 
@@ -65,7 +66,9 @@ class prompt(base):
 
         # new_inputs_id: <emotion> <eos> the first sentence by the interlocutor
         new_mask = torch.cat((append, new_mask), 1)
-        prev_input, past = model(inputs_id, past=past, attention_mask=new_mask, position_ids=position_ids)
+
+        output = model(inputs_id, past_key_values=past, attention_mask=new_mask, position_ids=position_ids)
+        prev_input, past = output['logits'], output['past_key_values']
         return prev_input, past, hidden_list[:], new_mask
 
     def re_padding(self, inputs_id, mask):

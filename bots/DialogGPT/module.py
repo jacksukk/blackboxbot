@@ -43,8 +43,8 @@ class bot(nn.Module):
             # take out the hidden state of original input and form it as past
             position_ids = m.long().cumsum(-1) - 1 
             position_ids.masked_fill_(m == 0, 1).to(self.device)
-            _, past = self.lm(prev_input, past=None, attention_mask=m, position_ids=position_ids)
-
+            outputs = self.lm(prev_input, past_key_values=None, attention_mask=m, position_ids=position_ids)
+            past = outputs['past_key_values']
             # append eos token in the end (add attention mask 1 in the eos)
             prev_input = torch.LongTensor([[eos] * len(sentences)]).squeeze(0).to(self.device)
             append = torch.tensor([[1] for i in range(len(sentences))]).to(self.device)
@@ -55,7 +55,8 @@ class bot(nn.Module):
             temp_sen = [[] for i in range(len(sentences))]
 
             for i in range(128):
-                prev_input, past = self.lm(prev_input, past=past, attention_mask=m, position_ids=position_ids)
+                output = self.lm(prev_input, past_key_values=past, attention_mask=m, position_ids=position_ids)
+                prev_input, past = output['logits'], output['past_key_values']
                 m = torch.cat((m, append), 1)
                 position_ids = m.long().cumsum(-1) - 1
                 position_ids.masked_fill_(m == 0, 1)

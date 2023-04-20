@@ -1,9 +1,8 @@
 import torch
 from torch import nn
 from torch.distributions.categorical import Categorical
-from goemotion.model import BertForMultiLabelClassification
-from goemotion.multilabel_pipeline import EmotionP
-from transformers import BertTokenizer
+#from goemotion.model import AutoModelForSequenceClassification
+from transformers import BertTokenizer, pipeline, AutoModelForSequenceClassification
 import torch.nn.functional as F
 import numpy as np
 import re
@@ -27,7 +26,13 @@ class agent(nn.Module):
         if self.type == "emotion":
             self.emotion_task()
             self.classifier_tokenizer = BertTokenizer.from_pretrained("goemotion/ckpt/original/original/")
-            self.classifier_model = BertForMultiLabelClassification.from_pretrained("goemotion/ckpt/original/original/")
+            self.classifier_model = AutoModelForSequenceClassification.from_pretrained("goemotion/ckpt/original/original/")
+            self.pipe = pipeline(
+            model=self.classifier_model,
+            tokenizer=self.classifier_tokenizer, 
+            task='text-classification', 
+            return_all_scores=True, 
+            function_to_apply='sigmoid')
 
         elif self.type == "word":
             self.word_task()
@@ -90,8 +95,8 @@ class agent(nn.Module):
                     old_mask.append(mask.detach().cpu())
                     old_states.append(prev_input.detach().cpu())
                     temp_past = past
-                    logits, past = model(prev_input, past=temp_past, attention_mask=mask, position_ids=position_ids)
-            
+                    output = model(prev_input, past_key_values=temp_past, attention_mask=mask, position_ids=position_ids)
+                    logits, past = output['logits'], output['past_key_values']            
                     prev_input = prev_input.to(self.device)   
                     mask = torch.cat((mask, append), 1)
                     position_ids = mask.long().cumsum(-1) - 1
@@ -176,7 +181,7 @@ class agent(nn.Module):
         if self.type == "emotion":
             for task_dict in predict_list:
                 if isinstance(task, str):
-                    score += task_dict[task[1:-1]]
+                    score +=  task_dict[task[1:-1]]
                     tempscore.append(task_dict[task[1:-1]])
                 elif isinstance(task, list):
                     score += task_dict[task[step][1:-1]]
@@ -293,8 +298,9 @@ class agent(nn.Module):
             position_ids.masked_fill_(flatten_mask[num] == 0, 1)
             position_ids = position_ids[:, -1].unsqueeze(-1).to(self.device)
             temp_past = past
-            logits, past = self.prompt.model(flatten_states[num], past=temp_past, attention_mask=flatten_mask[num], position_ids=position_ids)
-            hidden_states = self.prompt.model.transformer(flatten_states[num],past=temp_past, attention_mask=flatten_mask[num], position_ids=position_ids)[0]
+            outputs = self.prompt.model(flatten_states[num], past_key_values=temp_past, attention_mask=flatten_mask[num], position_ids=position_ids)
+            logits, past = outputs['logits'], outputs['past_key_values']
+            hidden_states = self.prompt.model.transformer(flatten_states[num], past_key_values=temp_past, attention_mask=flatten_mask[num], position_ids=position_ids)[0]
             hidden = self.prompt.state_network(hidden_states)
             prediction_list.append(hidden)
             logits_list.append(logits)
@@ -334,25 +340,28 @@ class agent(nn.Module):
             entropy += torch.mean(-self.args.ep_lr * dist_entropy).item()
             pg_loss += index_pg 
             
-        pg_loss /= outter_count
-        mse /= outter_count
+        pg_loss /= (outter_count + 1e-9)
+        mse /= (outter_count + 1e-9)
         loss = pg_loss + mse
 
         flatten_dict["contrastive"] = contrastive_list
         flatten_dict["length"] = length_list
-
-        return loss, flatten_dict, mse.item(), pg_loss.item(), entropy
+        mse_return = mse.item() if type(mse) != float else mse
+        pg_loss_return = pg_loss.item() if type(pg_loss) != float else pg_loss
+        return loss, flatten_dict, mse_return, pg_loss_return, entropy
 
 
     def emotion_reward(self, sentences):
+        results = []
 
-
-        goemotions = EmotionP(
-            model=self.classifier_model,
-            tokenizer=self.classifier_tokenizer,
-            threshold=0.3
-        )
-        return goemotions(sentences)
+        pipe_result = self.pipe(sentences)
+        for result_list in pipe_result:
+            result = {}
+            for dics in result_list:
+                result[dics['label']] = dics['score']
+            results.append(result)
+        
+        return results
     
     def word_reward(self, topic, sentences):
         

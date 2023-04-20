@@ -45,7 +45,7 @@ def main():
         print("which mode do you want to use: pretrain / finetune / test")
         raise
     
-    wandb.init(project='emnlp', tags=tags, name=args.exp_name, entity="naacl_maml_prompt")
+    wandb.init(mode='online', project='tacl', tags=tags, name=args.exp_name, entity="naacl_maml_prompt")
     wandb.config.update(args)
 
     agent = importlib.import_module('.module', f"agents.{args.agent}").agent
@@ -80,7 +80,7 @@ def main():
         elif args.mode == 'test':
             meta_total = [args.task]
          
-        task_bar =tqdm(total=len(meta_total)*args.sample_time*args.k_epoch,position=1,leave=True)
+        task_bar = tqdm(total=len(meta_total)*args.sample_time*args.k_epoch,position=1,leave=True)
         task_bar.set_description(desc=f"None, epoch: 0, score:{round(0.0, 3)}, loss:{round(0.0, 5)}",refresh=True)
         
         if batch <= args.end_batch:
@@ -132,8 +132,8 @@ def main():
 
                         loss, score, mse, pg_loss, entropy = \
                             Agent.train_forward(inputs_id, mask, ll, flatten_dict)
-                        
-                        total_loss += loss.item()
+                        w_loss = loss.item() if type(loss) != float else loss
+                        total_loss += w_loss
                         total_mse += mse
                         total_pg += pg_loss
                         total_entropy += entropy
@@ -143,10 +143,10 @@ def main():
                 Prompt.state_network.zero_grad()
 
                 if batch % args.log_interval == 0:
-                    tqdm.write(f"[Outer loss in batch {batch}]: {round(total_loss / args.bz/len(meta_total), 4)}")
-                    tqdm.write(f"[Outer score in batch {batch}]: {round(total_score/args.bz/len(meta_total), 4)}")
-                tqdm.write(f"outerloss in batch {batch}: {round(total_loss/args.bz/len(meta_total), 4)}")
-                tqdm.write(f"outerscore in batch {batch}: {round(total_score/args.bz/len(meta_total), 4)}")
+                    tqdm.write(f"[Outer loss in batch {batch}]: {total_loss / args.bz/len(meta_total)}")
+                    tqdm.write(f"[Outer score in batch {batch}]: {total_score/args.bz/len(meta_total)}")
+                tqdm.write(f"outerloss in batch {batch}: {total_loss/args.bz/len(meta_total)}")
+                tqdm.write(f"outerscore in batch {batch}: {total_score/args.bz/len(meta_total)}")
                 Agent.log_wandb(scores, total_loss, total_mse, total_pg, total_entropy, batch)
 
             else:
@@ -200,7 +200,7 @@ def main():
 
 def set_arguments(parser):
     parser.add_argument("--task", type=str, default="none") # for finetune task
-    parser.add_argument("--agent", type=str, default="coherence")
+    parser.add_argument("--agent", type=str, default="example")
     parser.add_argument("--config", type=str, default="example")
     parser.add_argument("--bot", type=str, default="example")
     parser.add_argument("--prompt", type=str, default="DialogGPT")
