@@ -9,14 +9,11 @@ class bot(nn.Module):
         """
         self.bot = GPT3_api or Blenderbot or DialogGPT
         """
-        openai.api_key =  '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'
+        openai.api_key =  []
 
     def make_response(self, prefix_sentences, prompts):
         
-        #openai.api_key = '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'
-        #openai.api_key =  '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'
-        
-        #openai.api_key =  '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'
+
         with torch.no_grad():
             sentences = []
             # output_sentences = [tokenizer.encode(x, add_prefix_space=True) for x in output_sentences_string]
