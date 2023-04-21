@@ -1,5 +1,6 @@
 # Blackbox
-
+This is the official implementation of the paper [Learning to Generate Prompts for Dialogue Generation through Reinforcement Learning
+](https://arxiv.org/abs/2206.03931)
 ## Installation
 1. Conda: ```conda create --name <env> --file environment.yml```
 
